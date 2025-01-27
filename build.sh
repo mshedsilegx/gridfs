@@ -23,5 +23,5 @@ chmod 644 *.go go*
 chmod 755 bin/*
 
 if [ "$3" == "--publish" ];then
-  tar Jcvf ../distrib/${APP_NAME}-${APP_VERSION%xg*}-amd64.tar.xz *
+  tar Jcvf ../../distrib/${APP_NAME}-${APP_VERSION%xg*}-amd64.tar.xz *
 fi
