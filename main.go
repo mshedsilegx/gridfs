@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -16,7 +17,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
-var Version string
+var version string
 
 // fileExistsAndNotEmpty checks if the file exists and is not empty.
 func fileExistsAndNotEmpty(filename string) bool {
@@ -28,15 +29,24 @@ func fileExistsAndNotEmpty(filename string) bool {
 }
 
 func main() {
-	if len(os.Args) < 3 {
-		fmt.Printf("Application Version: %s\n", Version)
-		log.Fatalf("Usage: %s <config_file> <file_with_list_of_names>", os.Args[0])
+	// Define command-line flags
+	configFile := flag.String("config", "", "Path to property file")
+	errorList := flag.String("errorlist", "", "List of files in processing error")
+	showVersion := flag.Bool("version", false, "Display application version")
+
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("GridFS Data Extractor:", version)
+		return
 	}
-	configFile := os.Args[1]
-	fileWithNames := os.Args[2]
+
+	if len(os.Args) < 3 {
+		log.Fatalf("Usage: %s <config_file> <list_of_files_in_error>", os.Args[0])
+	}
 
 	// Read configuration
-	err := readConfig(configFile)
+	err := readConfig(*configFile)
 	if err != nil {
 		log.Fatalf("Failed to read configuration: %v", err)
 	}
@@ -48,13 +58,13 @@ func main() {
 	gridFSPrefix := viper.GetString("MONGO_GRIDFS_PREFIX")
 
 	// Read file names from the provided file
-	fileNames, err := readFileNames(fileWithNames)
+	fileNames, err := readFileNames(*errorList)
 	if err != nil {
 		log.Fatalf("Failed to read file names: %v", err)
 	}
 
 	// Create a new client and connect to the server
-	clientOptions := options.Client().ApplyURI(uri).SetAuth(options.Credential{
+	clientOptions := options.Client().ApplyURI(uri).SetReadPreference(readpref.Secondary()).SetAuth(options.Credential{
 		Username: username,
 		Password: password,
 	})
