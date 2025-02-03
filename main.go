@@ -41,7 +41,7 @@ func main() {
 		return
 	}
 
-	if len(os.Args) < 3 {
+	if len(os.Args) < 4 {
 		log.Fatalf("Usage: %s <config_file> <list_of_files_in_error>", os.Args[0])
 	}
 
