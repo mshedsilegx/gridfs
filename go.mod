@@ -1,4 +1,4 @@
-module mckesson/gridfs
+module criticalsys/gridfs
 
 go 1.23.5
 
