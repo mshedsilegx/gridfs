@@ -4,7 +4,7 @@ go 1.23.5
 
 require (
 	github.com/spf13/viper v1.19.0
-	go.mongodb.org/mongo-driver v1.16.1
+	go.mongodb.org/mongo-driver v1.17.3
 )
 
 require (
