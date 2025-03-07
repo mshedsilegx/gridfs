@@ -1,4 +1,4 @@
-gridfs high performance extraction utility, for legacy mongodb, to current directory of a local file system. A configuration  file (ex: gridfs_extract_<instance>.properties) is needed of the following format:
+gridfs high performance extraction utility, for legacy mongodb, to current directory of a local file system. A configuration  file (ex: ```gridfs_extract_<instance>.properties```) is needed of the following format:
 
 ```
 # Application - On Prem DEV Environment
