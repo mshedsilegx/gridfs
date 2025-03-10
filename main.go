@@ -31,18 +31,19 @@ func fileExistsAndNotEmpty(filename string) bool {
 func main() {
 	// Define command-line flags
 	configFile := flag.String("config", "", "Path to property file")
-	errorList := flag.String("errorlist", "", "List of files in processing error")
+	blobList := flag.String("bloblist", "", "List of blob files to be retrieved")
 	showVersion := flag.Bool("version", false, "Display application version")
 
 	flag.Parse()
 
+	// Argument validation
 	if *showVersion {
 		fmt.Println("GridFS Data Extractor:", version)
 		return
 	}
-
-	if len(os.Args) < 4 {
-		log.Fatalf("Usage: %s <config_file> <list_of_files_in_error>", os.Args[0])
+	if *configFile == "" || *blobList == "" {
+		log.Fatalf("Usage: %s -config <config_file> -bloblist <list_of_blob_files>", os.Args[0])
+		return
 	}
 
 	// Read configuration
@@ -58,7 +59,7 @@ func main() {
 	gridFSPrefix := viper.GetString("MONGO_GRIDFS_PREFIX")
 
 	// Read file names from the provided file
-	fileNames, err := readFileNames(*errorList)
+	fileNames, err := readFileNames(*blobList)
 	if err != nil {
 		log.Fatalf("Failed to read file names: %v", err)
 	}
