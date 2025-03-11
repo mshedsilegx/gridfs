@@ -13,7 +13,7 @@ MONGO_GRIDFS_PREFIX=<grid fs collection, default is: default.fs>
 ```port```: 27017 by default, cannot be specified for Atlas
 
 Call syntax:\
-```gridfs <config_file> <error_file_list>```
+```gridfs -config <config_file> -bloblist <error_file_list>```
 
 Example of execution:\
-```gridfs /etc/gridfs_extract_dev.properties /var/lib/gridfs/meta/dev_20250307-105801.error```
+```gridfs -config /etc/gridfs_extract_dev.properties -bloblist /var/lib/gridfs/meta/dev_20250307-105801.txt```
