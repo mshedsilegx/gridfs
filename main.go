@@ -8,8 +8,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/magiconair/properties"
 	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/gridfs"
@@ -32,6 +34,7 @@ func main() {
 	// Define command-line flags
 	configFile := flag.String("config", "", "Path to property file")
 	blobList := flag.String("bloblist", "", "List of blob files to be retrieved")
+	blobPath := flag.String("blobpath", "", "Path where to store the blob files")
 	showVersion := flag.Bool("version", false, "Display application version")
 
 	flag.Parse()
@@ -41,8 +44,8 @@ func main() {
 		fmt.Println("GridFS Data Extractor:", version)
 		return
 	}
-	if *configFile == "" || *blobList == "" {
-		log.Fatalf("Usage: %s -config <config_file> -bloblist <list_of_blob_files>", os.Args[0])
+	if *configFile == "" || *blobList == "" || *blobPath == "" {
+		log.Fatalf("Usage: %s -config <config_file> -bloblist <list_of_blob_files> -blobpath <Stored_blob_path>", os.Args[0])
 		return
 	}
 
@@ -62,6 +65,13 @@ func main() {
 	fileNames, err := readFileNames(*blobList)
 	if err != nil {
 		log.Fatalf("Failed to read file names: %v", err)
+	}
+
+	// Check destination blob path
+	err = os.MkdirAll(*blobPath, 0755)
+	if err != nil {
+		fmt.Println("Error creating directory: %v", err)
+		return
 	}
 
 	// Create a new client and connect to the server
@@ -114,9 +124,10 @@ func main() {
 			downloadStream.Close()
 
 			// Save the file to disk
-			err = os.WriteFile(fileName, data, 0644)
+			filePath := filepath.Join(*blobPath, fileName)
+			err = os.WriteFile(filePath, data, 0644)
 			if err != nil {
-				log.Printf("Failed to write file %v to disk: %v", fileName, err)
+				log.Printf("Failed to write file %v to disk: %v", filePath, err)
 				continue
 			}
 
@@ -127,8 +138,20 @@ func main() {
 
 // readConfig reads the configuration from the specified file.
 func readConfig(filename string) error {
-	viper.SetConfigFile(filename)
-	return viper.ReadInConfig()
+	p, err := properties.LoadFile(filename, properties.UTF8)
+	if err != nil {
+		return err
+	}
+
+	// Iterate through the properties and set them in Viper
+	for _, key := range p.Keys() {
+		value, ok := p.Get(key)
+		if ok {
+			viper.Set(key, value)
+		}
+	}
+	// Return nil to indicate successful completion
+	return nil
 }
 
 // readFileNames reads file names from the given file.
