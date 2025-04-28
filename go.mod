@@ -3,7 +3,7 @@ module criticalsys/gridfs
 go 1.23.5
 
 require (
-	github.com/magiconair/properties v1.8.9
+	github.com/magiconair/properties v1.8.10
 	github.com/spf13/viper v1.20.1
 	go.mongodb.org/mongo-driver v1.10.6
 )
