@@ -1,34 +1,20 @@
 package main
 
 import (
-	"bufio"
 	"context"
+	"criticalsys/gridfs/pkg/config"
+	"criticalsys/gridfs/pkg/fileops"
+	"criticalsys/gridfs/pkg/gridfs"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
-
-	"github.com/magiconair/properties"
-	"github.com/spf13/viper"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/gridfs"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"sync"
+	"time"
 )
 
 var version string
-
-// fileExistsAndNotEmpty checks if the file exists and is not empty.
-func fileExistsAndNotEmpty(filename string) bool {
-	info, err := os.Stat(filename)
-	if os.IsNotExist(err) || info.Size() == 0 {
-		return false
-	}
-	return true
-}
 
 func main() {
 	// Define command-line flags
@@ -46,132 +32,70 @@ func main() {
 	}
 	if *configFile == "" || *blobList == "" || *blobPath == "" {
 		log.Fatalf("Usage: %s -config <config_file> -bloblist <list_of_blob_files> -blobpath <Stored_blob_path>", os.Args[0])
-		return
 	}
 
 	// Read configuration
-	err := readConfig(*configFile)
+	cfg, err := config.LoadConfig(*configFile)
 	if err != nil {
 		log.Fatalf("Failed to read configuration: %v", err)
 	}
 
-	uri := viper.GetString("MONGO_URI")
-	username := viper.GetString("MONGO_USER")
-	password := viper.GetString("MONGO_PASS")
-	database := viper.GetString("MONGO_DB")
-	gridFSPrefix := viper.GetString("MONGO_GRIDFS_PREFIX")
-
 	// Read file names from the provided file
-	fileNames, err := readFileNames(*blobList)
+	fileNames, err := fileops.ReadFileNames(*blobList)
 	if err != nil {
 		log.Fatalf("Failed to read file names: %v", err)
 	}
 
 	// Check destination blob path
-	err = os.MkdirAll(*blobPath, 0755)
-	if err != nil {
-		fmt.Println("Error creating directory: %v", err)
-		return
+	if err := fileops.CreateDirectory(*blobPath); err != nil {
+		log.Fatalf("Error creating directory: %v", err)
 	}
 
 	// Create a new client and connect to the server
-	clientOptions := options.Client().ApplyURI(uri).SetReadPreference(readpref.Secondary()).SetAuth(options.Credential{
-		Username: username,
-		Password: password,
-	})
-	client, err := mongo.Connect(context.TODO(), clientOptions)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client, err := gridfs.NewClient(ctx, cfg)
 	if err != nil {
-		log.Fatalf("Failed to connect to MongoDB: %v", err)
+		log.Fatalf("Failed to create GridFS client: %v", err)
 	}
+	defer client.Disconnect(ctx)
 
-	// Ensure disconnection at the end
-	defer func() {
-		if err := client.Disconnect(context.TODO()); err != nil {
-			log.Fatalf("Failed to disconnect MongoDB: %v", err)
-		}
-	}()
+	// Concurrently download files
+	var wg sync.WaitGroup
+	jobs := make(chan string, len(fileNames))
 
-	// Ping the primary
-	if err := client.Ping(context.TODO(), readpref.Primary()); err != nil {
-		log.Fatalf("Failed to ping MongoDB: %v", err)
-	}
-
-	// Select the database and GridFS bucket
-	db := client.Database(database)
-	bucket, err := gridfs.NewBucket(db, options.GridFSBucket().SetName(gridFSPrefix))
-	if err != nil {
-		log.Fatalf("Failed to create GridFS bucket: %v", err)
+	for i := 0; i < cfg.NumWorkers; i++ {
+		wg.Add(1)
+		go worker(&wg, jobs, client, *blobPath, cfg)
 	}
 
 	for _, fileName := range fileNames {
-		if fileExistsAndNotEmpty(fileName) {
-			fmt.Printf("File %s already exists locally or is empty.\n", fileName)
+		jobs <- fileName
+	}
+	close(jobs)
+
+	wg.Wait()
+
+	fmt.Println("All files downloaded.")
+}
+
+func worker(wg *sync.WaitGroup, jobs <-chan string, client *gridfs.Client, blobPath string, cfg *config.Config) {
+	defer wg.Done()
+	for fileName := range jobs {
+		// Construct the full path to the file
+		filePath := filepath.Join(blobPath, fileName)
+
+		if fileops.FileExistsAndNotEmpty(filePath) {
+			log.Printf("File %s already exists locally and is not empty.\n", fileName)
+			continue
+		}
+
+		err := client.DownloadFile(fileName, blobPath, int64(cfg.LargeFileThresholdMB)*1024*1024)
+		if err != nil {
+			log.Printf("Failed to download file %v: %v", fileName, err)
 		} else {
-			// Open a download stream by file name
-			downloadStream, err := bucket.OpenDownloadStreamByName(fileName)
-			if err != nil {
-				log.Printf("Failed to open download stream for file %v: %v", fileName, err)
-				continue
-			}
-
-			// Read the file data
-			data, err := io.ReadAll(downloadStream)
-			if err != nil {
-				log.Printf("Failed to read data from download stream: %v", err)
-				downloadStream.Close()
-				continue
-			}
-			downloadStream.Close()
-
-			// Save the file to disk
-			filePath := filepath.Join(*blobPath, fileName)
-			err = os.WriteFile(filePath, data, 0644)
-			if err != nil {
-				log.Printf("Failed to write file %v to disk: %v", filePath, err)
-				continue
-			}
-
 			fmt.Printf("Downloaded file from gridfs to local: %v\n", fileName)
 		}
 	}
-}
-
-// readConfig reads the configuration from the specified file.
-func readConfig(filename string) error {
-	p, err := properties.LoadFile(filename, properties.UTF8)
-	if err != nil {
-		return err
-	}
-
-	// Iterate through the properties and set them in Viper
-	for _, key := range p.Keys() {
-		value, ok := p.Get(key)
-		if ok {
-			viper.Set(key, value)
-		}
-	}
-	// Return nil to indicate successful completion
-	return nil
-}
-
-// readFileNames reads file names from the given file.
-func readFileNames(filename string) ([]string, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var names []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			names = append(names, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return names, nil
 }
