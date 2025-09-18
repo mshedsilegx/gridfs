@@ -59,7 +59,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create GridFS client: %v", err)
 	}
-	defer client.Disconnect(ctx)
+	defer func() {
+		if err := client.Disconnect(ctx); err != nil {
+			log.Fatalf("Failed to disconnect from MongoDB: %v", err)
+		}
+	}()
 
 	// Concurrently download files
 	var wg sync.WaitGroup

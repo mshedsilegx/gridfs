@@ -16,14 +16,17 @@ func FileExistsAndNotEmpty(filename string) bool {
 }
 
 // ReadFileNames reads file names from the given file.
-func ReadFileNames(filename string) ([]string, error) {
+func ReadFileNames(filename string) (names []string, err error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
-	var names []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
