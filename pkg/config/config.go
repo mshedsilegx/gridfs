@@ -10,7 +10,7 @@ type Config struct {
 	MongoUser            string `mapstructure:"MONGO_USER"`
 	MongoPass            string `mapstructure:"MONGO_PASS"`
 	MongoDB              string `mapstructure:"MONGO_DB"`
-	MongoGridFSPrefix     string `mapstructure:"MONGO_GRIDFS_PREFIX"`
+	MongoGridFSPrefix    string `mapstructure:"MONGO_GRIDFS_PREFIX"`
 	NumWorkers           int    `mapstructure:"NUM_WORKERS"`
 	LargeFileThresholdMB int    `mapstructure:"LARGE_FILE_THRESHOLD_MB"`
 }
