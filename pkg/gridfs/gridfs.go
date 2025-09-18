@@ -49,12 +49,16 @@ func NewClient(ctx context.Context, cfg *config.Config) (*Client, error) {
 }
 
 // DownloadFile downloads a file from GridFS and saves it to the specified path.
-func (c *Client) DownloadFile(fileName, blobPath string, largeFileThreshold int64) error {
+func (c *Client) DownloadFile(fileName, blobPath string, largeFileThreshold int64) (err error) {
 	downloadStream, err := c.bucket.OpenDownloadStreamByName(fileName)
 	if err != nil {
 		return fmt.Errorf("failed to open download stream for file %v: %w", fileName, err)
 	}
-	defer downloadStream.Close()
+	defer func() {
+		if closeErr := downloadStream.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
 	fileSize := downloadStream.GetFile().Length
 	filePath := filepath.Join(blobPath, fileName)
@@ -65,7 +69,11 @@ func (c *Client) DownloadFile(fileName, blobPath string, largeFileThreshold int6
 		if err != nil {
 			return fmt.Errorf("failed to create file %v for streaming: %w", filePath, err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil && err == nil {
+				err = closeErr
+			}
+		}()
 
 		if _, err := io.Copy(file, downloadStream); err != nil {
 			return fmt.Errorf("failed to stream file %v to disk: %w", fileName, err)
